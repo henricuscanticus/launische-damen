@@ -64,10 +64,11 @@ var RANKS=["K","D","B","10","9","8","7","6","5","4","3","2","A"];
 var F_ORD=["K","A","2","3","4","5","6","7","8","9","10","B","D"];
 var T_ORD=["A","2","3","4","5","6","7","8","9","10","B","D","K"];
 
-var reserve,stock,abwurf,tableau,found,sel,dameWait,hist,reserveOpen,reserveDameWait;
+var reserve,stock,abwurf,tableau,found,sel,dameWait,hist,reserveOpen;
 
-function reserveHasKarten(){
-  return reserve.length>0||reserveOpen!==null||reserveDameWait;
+function hatLeerenPlatz(){
+  for(var i=0;i<8;i++) if(tableau[i].length===0) return true;
+  return false;
 }
 
 function neuesSpiel(){
@@ -81,7 +82,7 @@ function neuesSpiel(){
   abwurf=[];
   tableau=[[],[],[],[],[],[],[],[]];
   found=[[],[],[],[],[],[],[],[]];
-  sel=null;dameWait=false;hist=[];reserveOpen=null;reserveDameWait=false;
+  sel=null;dameWait=false;hist=[];reserveOpen=null;
   erstAusteilen();
   render();
   msg("Klicke auf den Stock!");
@@ -113,8 +114,7 @@ function save(){
     tableau:tableau.map(function(t){return t.slice();}),
     found:found.map(function(f){return f.slice();}),
     dameWait:dameWait,
-    reserveOpen:reserveOpen,
-    reserveDameWait:reserveDameWait
+    reserveOpen:reserveOpen
   }));
 }
 
@@ -123,7 +123,7 @@ function undo(){
   var s=JSON.parse(hist.pop());
   reserve=s.reserve;stock=s.stock;abwurf=s.abwurf;
   tableau=s.tableau;found=s.found;dameWait=s.dameWait;
-  reserveOpen=s.reserveOpen;reserveDameWait=s.reserveDameWait;
+  reserveOpen=s.reserveOpen;
   sel=null;render();msg("↩ Rückgängig!");
 }
 
@@ -132,10 +132,14 @@ function tap(el,fn){
   el.addEventListener("click",function(e){e.stopPropagation();fn();});
 }
 
+// Prüfe ob Spiel blockiert ist wegen leerem Platz + Reserve hat Karten
+function reservePflicht(){
+  return hatLeerenPlatz() && (reserve.length>0 || reserveOpen!==null);
+}
+
 function stockClick(){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-  if(reserveOpen){msg("Lege zuerst die Reserve-Karte auf einen Hilfsstapel!");return;}
-  if(reserveDameWait){msg("👑 Klicke zuerst die Dame auf der Reserve!");return;}
+  if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
   if(!stock.length){msg("Stock ist leer!");return;}
   save();
   var c=stock.shift();
@@ -151,8 +155,7 @@ function stockClick(){
 
 function abwurfClick(){
   if(!abwurf.length)return;
-  if(reserveOpen){msg("Lege zuerst die Reserve-Karte auf einen Hilfsstapel!");return;}
-  if(reserveDameWait){msg("👑 Klicke zuerst die Dame auf der Reserve!");return;}
+  if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
   var c=abwurf[abwurf.length-1];
   if(dameWait&&c.r==="D"){
     save();
@@ -180,10 +183,35 @@ function abwurfClick(){
 function reserveClick(){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
 
-  // Dame auf Reserve wartet → Damenprozedere
-  if(reserveDameWait&&reserveOpen){
-    save();
-    var c=reserveOpen;
+  // Karte liegt bereits offen → warte auf Klick auf leeren Stapel
+  if(reserveOpen){
+    msg(reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
+    return;
+  }
+
+  // Kein leerer Platz → Reserve nicht nötig
+  if(!hatLeerenPlatz()){msg("Kein leerer Hilfsstapel!");return;}
+
+  // Reserve leer
+  if(!reserve.length){msg("Reserve ist leer!");return;}
+
+  save();
+  reserveOpen=reserve.pop();
+  if(reserveOpen.r==="D"){
+    msg("👑 Dame "+sName(reserveOpen.s)+" – Klicke einen leeren Hilfsstapel!");
+  } else {
+    msg(reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
+  }
+  render();
+}
+
+function legeReserveAuf(ti){
+  // Lege reserveOpen auf leeren Hilfsstapel ti
+  var c=reserveOpen;
+  reserveOpen=null;
+  tableau[ti].push(c);
+  if(c.r==="D"){
+    // Dame: 5 Karten unter den Stock
     var n=Math.min(5,reserve.length);
     var namen="";
     if(n>0){
@@ -191,76 +219,52 @@ function reserveClick(){
       namen=ex.map(function(x){return x.r+SYM[x.s];}).join(" ");
       for(var j=0;j<ex.length;j++)stock.push(ex[j]);
     }
-    stock.push(c);
-    reserveOpen=null;
-    reserveDameWait=false;
     render();
-    showOverlay("👑 Dame "+sName(c.s)+" aus Reserve!\n"+
-      (n>0?"Dame + "+n+" Karten ("+namen+")\nkommen unter den Stock.":"Dame kommt unter den Stock."));
-    return;
-  }
-
-  // Normale Karte liegt offen → nichts tun
-  if(reserveOpen){
-    msg("Lege die Karte auf einen leeren Hilfsstapel!");
-    return;
-  }
-
-  // Prüfe ob ein Hilfsstapel leer ist
-  var hatLeer=false;
-  for(var i=0;i<8;i++) if(tableau[i].length===0){hatLeer=true;break;}
-  if(!hatLeer){msg("Kein leerer Hilfsstapel!");return;}
-
-  if(!reserve.length){msg("Reserve ist leer!");return;}
-
-  save();
-  var c=reserve.pop();
-  reserveOpen=c;
-
-  if(c.r==="D"){
-    reserveDameWait=true;
-    msg("👑 Dame "+sName(c.s)+" auf Reserve! Klicke sie für Damenprozedere!");
+    showOverlay("👑 Dame "+sName(c.s)+" auf Hilfsstapel!\n"+
+      (n>0?n+" Karten ("+namen+")\nkommen unter den Stock.":"Keine Karten mehr in Reserve."));
   } else {
-    msg(c.r+SYM[c.s]+" von Reserve – Klicke einen leeren Hilfsstapel!");
+    // Normale Karte: prüfe ob noch leere Plätze und Reserve hat Karten
+    if(hatLeerenPlatz()&&reserve.length>0){
+      msg("Noch leerer Platz! Klicke wieder die Reserve!");
+    } else {
+      msg("Karte gelegt! Spiel weiter.");
+    }
+    render();
   }
-  render();
 }
 
 function tableauClick(ti,ci){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-  if(reserveDameWait){msg("👑 Klicke zuerst die Dame auf der Reserve!");return;}
   var col=tableau[ti];
 
   // Reserve-Karte auf leeren Stapel legen
-  if(reserveOpen){
+  if(reserveOpen!==null){
     if(col.length===0){
       save();
-      tableau[ti].push(reserveOpen);
-      reserveOpen=null;
-      msg("Reserve-Karte gelegt!");
-      render();
+      legeReserveAuf(ti);
       return;
     } else {
       msg("Nur auf leeren Hilfsstapel!");return;
     }
   }
 
+  // Spiel blockiert wegen leerem Platz
+  if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
+
   var c=col[ci];
   if(!c)return;
-
   if(sel){
     if(sel.src==="t"+ti&&sel.ci===ci){sel=null;render();return;}
-    // Ziel ist leerer Stapel
+    // Ziel leer → nur wenn keine Reserve mehr
     if(col.length===0){
-      if(reserveHasKarten()){
-        msg("Reserve zuerst! Leere Stapel nur von Reserve belegen.");
+      if(reserve.length>0||reserveOpen!==null){
+        msg("Leere Stapel zuerst von Reserve belegen!");
         sel=null;render();return;
       }
       save();
       placeOn(ti);
       return;
     }
-    // Ziel hat Karten → normal stapeln
     if(ci===col.length-1&&canStack(sel.card,c)){
       save();
       placeOn(ti);
@@ -275,27 +279,20 @@ function tableauClick(ti,ci){
 
 function emptySlotClick(ti){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-  if(reserveDameWait){msg("👑 Klicke zuerst die Dame auf der Reserve!");return;}
 
   // Reserve-Karte platzieren
-  if(reserveOpen){
+  if(reserveOpen!==null){
     save();
-    tableau[ti].push(reserveOpen);
-    reserveOpen=null;
-    msg("Reserve-Karte gelegt!");
-    render();
+    legeReserveAuf(ti);
     return;
   }
 
-  // Kein sel → nichts tun
+  // Spiel blockiert
+  if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
+
   if(!sel)return;
 
-  // Reserve hat noch Karten → blockieren
-  if(reserveHasKarten()){
-    msg("Reserve zuerst! Leere Stapel nur von Reserve belegen.");
-    sel=null;render();return;
-  }
-
+  // Reserve leer → darf von Abwurf oder Hilfsstapel
   save();
   placeOn(ti);
 }
@@ -314,7 +311,7 @@ function placeOn(ti){
 
 function foundClick(fi){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-  if(reserveOpen||reserveDameWait){msg("Lege zuerst die Reserve-Karte!");return;}
+  if(reserveOpen!==null){msg("Lege zuerst die Reserve-Karte!");return;}
   if(!sel)return;
   var c=sel.card;
   if(canFound(c,fi)){
@@ -361,6 +358,12 @@ function showOverlay(t){
 
 function overlayOK(){
   document.getElementById("overlay").className="";
+  // Nach Dame-Popup: prüfe ob noch leere Plätze und Reserve hat Karten
+  if(hatLeerenPlatz()&&reserve.length>0){
+    msg("Noch leerer Platz! Klicke wieder die Reserve!");
+  } else {
+    msg("Spiel weiter!");
+  }
   render();
 }
 
@@ -399,8 +402,9 @@ function render(){
 
   var rs=document.getElementById("s-reserve");
   rs.innerHTML="";
-  if(reserveOpen){
-    rs.appendChild(makeCard(reserveOpen,reserveClick,false,reserveDameWait,false,!reserveDameWait));
+  if(reserveOpen!==null){
+    var isDame=reserveOpen.r==="D";
+    rs.appendChild(makeCard(reserveOpen,reserveClick,false,isDame,false,!isDame));
   } else if(reserve.length){
     rs.appendChild(makeFD(reserveClick));
   } else {
@@ -466,21 +470,18 @@ function regeln(){
     "Ziel: Alle Karten auf die 8 Grundkartenstapel\n"+
     "Grundkarten: farbecht aufwärts K→A→2→...→B→D\n\n"+
     "Hilfsstapel: farbecht abwärts D→B→10→...→A→K\n"+
-    "Leerer Stapel: nur von Reserve belegen!\n"+
-    "(bei leerer Reserve: vom Abwurf oder Hilfsstapel)\n\n"+
+    "Leerer Stapel: Reserve antippen → Karte aufdecken\n"+
+    "→ Karte auf leeren Stapel legen\n"+
+    "→ Bei Dame: Dame auf Stapel + 5 Karten unter Stock\n"+
+    "→ Mehrere Lücken: Ablauf wiederholt sich\n\n"+
     "Stock: Karte aufdecken auf Abwurf\n"+
     "Dame im Stock:\n"+
     "→ Dame im Abwurf antippen\n"+
     "→ Die untersten 3 Karten des Abwurfs\n"+
     "   kommen unter den Stock\n\n"+
-    "Reserve füllt leere Hilfsstapel:\n"+
-    "→ Reserve antippen → Karte aufdecken\n"+
-    "→ Karte auf leeren Hilfsstapel legen\n"+
-    "Dame in Reserve:\n"+
-    "→ Dame erscheint auf Reserve (rot markiert)\n"+
-    "→ Dame antippen → Damenprozedere\n"+
-    "→ Dame + 5 Karten kommen unter den Stock\n"+
-    "→ Nächste Reserve-Karte aufdecken"
+    "Bei leerer Reserve:\n"+
+    "→ Leere Stapel dürfen vom Abwurf\n"+
+    "   oder Hilfsstapel belegt werden"
   );
 }
 
