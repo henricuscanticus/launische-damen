@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Die Launischen Damen</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2d6a2d;font-family:Arial,sans-serif;padding:8px;color:white;touch-action:manipulation}
+h1{text-align:center;font-size:1.2em;margin-bottom:4px;color:#ffd700}
+.info{text-align:center;font-size:.75em;margin-bottom:6px;color:#cfc}
+.row{display:flex;gap:4px;justify-content:center;margin-bottom:6px;flex-wrap:wrap}
+.slot{width:108px;min-height:150px;border:2px dashed rgba(255,255,255,.4);border-radius:8px;position:relative;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.slot-label{font-size:.7em;color:rgba(255,255,255,.6);text-align:center;margin-bottom:2px}
+.card{width:104px;height:144px;border-radius:8px;border:2px solid #bbb;background:white;padding:6px 8px;box-shadow:2px 3px 6px rgba(0,0,0,.5);flex-shrink:0;display:flex;align-items:flex-start}
+.card-inner{display:flex;gap:3px;align-items:center}
+.card-rank{font-size:2.8em;font-weight:bold;line-height:1}
+.card-suit{font-size:2.8em;line-height:1}
+.red{color:#cc0000}
+.black{color:#111}
+.facedown{background:repeating-linear-gradient(45deg,#1a4fa0,#1a4fa0 7px,#1e5cbf 7px,#1e5cbf 14px);border:2px solid #4a7fd4}
+.selected{border:4px solid #ffd700 !important;box-shadow:0 0 16px #ffd700 !important}
+.dame{border:4px solid #ff4444 !important;box-shadow:0 0 16px #ff4444 !important}
+.reserve-open{border:4px solid #00ff99 !important;box-shadow:0 0 16px #00ff99 !important}
+.stacked{margin-top:-105px}
+.section{text-align:center;font-size:.7em;color:#cfc;margin:4px 0 2px;font-weight:bold}
+#msg{text-align:center;color:#ffd700;font-size:.9em;min-height:1.2em;margin:4px 0}
+.btns{display:flex;justify-content:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+button{padding:10px 14px;border-radius:6px;border:none;background:#ffd700;color:#333;font-weight:bold;cursor:pointer;font-size:.85em}
+.undo{background:#ff8c00;color:white}
+#overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:999;align-items:center;justify-content:center}
+#overlay.show{display:flex}
+#overlay-box{background:#1a4a1a;border:2px solid #ffd700;border-radius:12px;padding:20px;max-width:320px;text-align:center}
+#overlay-text{color:#ffd700;font-size:1em;margin-bottom:16px;white-space:pre-line}
+#overlay-ok{padding:12px 24px;border-radius:8px;border:none;background:#ffd700;color:#333;font-weight:bold;cursor:pointer;font-size:1em}
+</style>
+</head>
+<body>
+<h1>🃏 Die Launischen Damen</h1>
+<div class="info">Reserve: <b id="hc">0</b> &nbsp; Stock: <b id="tc">0</b> &nbsp; Abwurf: <b id="ac">0</b></div>
+<div class="row">
+  <div><div class="slot-label">Reserve</div><div class="slot" id="s-reserve"></div></div>
+  <div><div class="slot-label">Stock</div><div class="slot" id="s-stock"></div></div>
+  <div><div class="slot-label">Abwurf</div><div class="slot" id="s-abwurf"></div></div>
+</div>
+<div class="section">Grundkarten (K→D)</div>
+<div class="row" id="s-found"></div>
+<div class="section">Hilfskartenstapel (D→K)</div>
+<div class="row" id="s-tableau"></div>
+<div id="msg">Klicke auf den Stock!</div>
+<div class="btns">
+  <button onclick="neuesSpiel()">Neues Spiel</button>
+  <button onclick="regeln()">Regeln</button>
+  <button class="undo" onclick="undo()">↩ Rückgängig</button>
+</div>
+<div id="overlay"><div id="overlay-box"><div id="overlay-text"></div><button id="overlay-ok" onclick="overlayOK()">OK</button></div></div>
+
+<script>
+var SYM={"S":"♠","H":"♥","D":"♦","C":"♣"};
+var COL={"S":"black","H":"red","D":"red","C":"black"};
+var SUITS=["S","H","D","C","S","H","D","C"];
+var RANKS=["K","D","B","10","9","8","7","6","5","4","3","2","A"];
+var F_ORD=["K","A","2","3","4","5","6","7","8","9","10","B","D"];
+var T_ORD=["A","2","3","4","5","6","7","8","9","10","B","D","K"];
+
+var reserve,stock,abwurf,tableau,found,sel,dameWait,hist,reserveOpen;
+
+function neuesSpiel(){
+  var deck=[];
+  for(var i=0;i<RANKS.length;i++)
+    for(var j=0;j<SUITS.length;j++)
+      deck.push({r:RANKS[i],s:SUITS[j]});
+  shuffle(deck);
+  reserve=deck.slice(0,32);
+  stock=deck.slice(32);
+  abwurf=[];
+  tableau=[[],[],[],[],[],[],[],[]];
+  found=[[],[],[],[],[],[],[],[]];
+  sel=null;dameWait=false;hist=[];reserveOpen=null;
+  erstAusteilen();
+  render();
+  msg("Klicke auf den Stock!");
+}
+
+function shuffle(a){
+  for(var i=a.length-1;i>0;i--){
+    var j=Math.floor(Math.random()*(i+1));
+    var t=a[i];a[i]=a[j];a[j]=t;
+  }
+}
+
+function erstAusteilen(){
+  for(var i=0;i<8;i++){
+    for(var j=0;j<stock.length;j++){
+      if(stock[j].r!=="D"){
+        tableau[i].push(stock.splice(j,1)[0]);
+        break;
+      }
+    }
+  }
+}
+
+function save(){
+  hist.push(JSON.stringify({
+    reserve:reserve.slice(),
+    stock:stock.slice(),
+    abwurf:abwurf.slice(),
+    tableau:tableau.map(function(t){return t.slice();}),
+    found:found.map(function(f){return f.slice();}),
+    dameWait:dameWait,
+    reserveOpen:reserveOpen
+  }));
+}
+
+function undo(){
+  if(!hist.length){msg("Nichts rückgängig!");return;}
+  var s=JSON.parse(hist.pop());
+  reserve=s.reserve;stock=s.stock;abwurf=s.abwurf;
+  tableau=s.tableau;found=s.found;dameWait=s.dameWait;
+  reserveOpen=s.reserveOpen;
+  sel=null;render();msg("↩ Rückgängig!");
+}
+
+function tap(el,fn){
+  el.addEventListener("touchend",function(e){e.preventDefault();e.stopPropagation();fn();});
+  el.addEventListener("click",function(e){e.stopPropagation();fn();});
+}
+
+function stockClick(){
+  if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
+  if(reserveOpen){msg("Lege zuerst die Reserve-Karte auf einen Hilfsstapel!");return;}
+  if(!stock.length){msg("Stock ist leer!");return;}
+  save();
+  var c=stock.shift();
+  abwurf.push(c);
+  if(c.r==="D"){
+    dameWait=true;
+    msg("👑 Dame "+sName(c.s)+"! Klicke sie im Abwurf!");
+  } else {
+    msg(c.r+SYM[c.s]+" aufgedeckt.");
+  }
+  render();
+}
+
+function abwurfClick(){
+  if(!abwurf.length)return;
+  if(reserveOpen){msg("Lege zuerst die Reserve-Karte auf einen Hilfsstapel!");return;}
+  var c=abwurf[abwurf.length-1];
+  if(dameWait&&c.r==="D"){
+    save();
+    var n=Math.min(3,abwurf.length-1);
+    var namen="";
+    if(n>0){
+      var unten=abwurf.splice(0,n);
+      namen=unten.map(function(x){return x.r+SYM[x.s];}).join(" ");
+      for(var i=0;i<unten.length;i++)stock.push(unten[i]);
+    }
+    dameWait=false;
+    render();
+    showOverlay(n>0
+      ?"👑 Dame "+sName(c.s)+"!\nDie untersten "+n+" Karten des Abwurfs\n("+namen+")\nkommen unter den Stock."
+      :"👑 Dame "+sName(c.s)+"!\nAbwurf war leer.");
+    return;
+  }
+  if(dameWait){msg("👑 Klicke die Dame im Abwurf!");return;}
+  if(sel&&sel.src==="ab"){sel=null;render();return;}
+  sel={card:c,src:"ab"};
+  msg(c.r+SYM[c.s]+" ausgewählt.");
+  render();
+}
+
+function reserveClick(){
+  if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
+  if(reserveOpen){msg("Lege zuerst die aufgedeckte Karte auf einen Hilfsstapel!");return;}
+  if(!reserve.length){msg("Reserve ist leer!");return;}
+  // Prüfe ob ein Hilfsstapel leer ist
+  var hatLeer=false;
+  for(var i=0;i<8;i++) if(tableau[i].length===0){hatLeer=true;break;}
+  if(!hatLeer){msg("Kein leerer Hilfsstapel!");return;}
+  save();
+  reserveOpen=reserve.pop();
+  if(reserveOpen.r==="D"){
+    // Dame aus Reserve: Damenprozedere
+    var n=Math.min(5,reserve.length);
+    var ex=reserve.splice(reserve.length-n,n);
+    for(var j=0;j<ex.length;j++)stock.push(ex[j]);
+    stock.push(reserveOpen);
+    reserveOpen=null;
+    render();
+    showOverlay("👑 Dame "+sName(reserveOpen?reserveOpen.s:"")+" aus Reserve!\nDame + "+n+" Karten vom Reservestapel\nkommen unter den Stock.");
+  } else {
+    msg("Reserve: "+reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
+    render();
+  }
+}
+
+function tableauClick(ti,ci){
+  if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
+  var col=tableau[ti];
+
+  // Reserve-Karte auf leeren Stapel legen
+  if(reserveOpen){
+    if(col.length===0){
+      save();
+      tableau[ti].push(reserveOpen);
+      reserveOpen=null;
+      msg("Reserve-Karte gelegt!");
+      render();
+      return;
+    } else {
+      msg("Nur auf leeren Hilfsstapel!");return;
+    }
+  }
+
+  var c=col[ci];
+  if(!c)return;
+  if(sel){
+    if(sel.src==="t"+ti&&sel.ci===ci){sel=null;render();return;}
+    if(ci===col.length-1&&canStack(sel.card,c)){
+      save();
+      placeOn(ti);
+      return;
+    }
+    sel=null;msg("Passt nicht!");render();return;
+  }
+  sel={card:c,src:"t"+ti,ci:ci};
+  msg(c.r+SYM[c.s]+" ausgewählt.");
+  render();
+}
+
+function emptySlotClick(ti){
+  if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
+  if(reserveOpen){
+    save();
+    tableau[ti].push(reserveOpen);
+    reserveOpen=null;
+    msg("Reserve-Karte gelegt!");
+    render();
+    return;
+  }
+  if(!sel)return;
+  save();
+  placeOn(ti);
+}
+
+function placeOn(ti){
+  if(sel.src==="ab"){
+    abwurf.pop();
+    tableau[ti].push(sel.card);
+  } else {
+    var si=parseInt(sel.src.substring(1));
+    var cards=tableau[si].splice(sel.ci);
+    for(var k=0;k<cards.length;k++)tableau[ti].push(cards[k]);
+  }
+  sel=null;msg("Karte verschoben!");render();
+}
+
+function foundClick(fi){
+  if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
+  if(reserveOpen){msg("Lege zuerst die Reserve-Karte auf einen Hilfsstapel!");return;}
+  if(!sel)return;
+  var c=sel.card;
+  if(canFound(c,fi)){
+    save();
+    if(sel.src==="ab")abwurf.pop();
+    else{
+      var si=parseInt(sel.src.substring(1));
+      tableau[si].splice(sel.ci,1);
+    }
+    found[fi].push(c);
+    sel=null;msg(c.r+SYM[c.s]+" aufs Fundament!");render();checkWin();
+  } else {
+    sel=null;msg("Passt nicht!");render();
+  }
+}
+
+function canStack(top,bot){
+  if(top.s!==bot.s)return false;
+  var ti=T_ORD.indexOf(top.r);
+  var bi=T_ORD.indexOf(bot.r);
+  return ti>=0&&bi>=0&&ti===bi-1;
+}
+
+function canFound(c,fi){
+  var f=found[fi];
+  if(f.length===0)return c.r==="K";
+  if(f[0].s!==c.s)return false;
+  var li=F_ORD.indexOf(f[f.length-1].r);
+  var ci2=F_ORD.indexOf(c.r);
+  return ci2===li+1;
+}
+
+function sName(s){return s==="H"?"Herz":s==="D"?"Karo":s==="S"?"Pik":"Kreuz";}
+
+function checkWin(){
+  for(var i=0;i<8;i++)if(found[i].length<13)return;
+  showOverlay("🎉 GEWONNEN!\nAlle Damen sind gezähmt!");
+}
+
+function showOverlay(t){
+  document.getElementById("overlay-text").textContent=t;
+  document.getElementById("overlay").className="show";
+}
+
+function overlayOK(){
+  document.getElementById("overlay").className="";
+  render();
+}
+
+function msg(t){document.getElementById("msg").textContent=t;}
+
+function makeCard(c,fn,isSel,isDame,isStacked,isReserve){
+  var d=document.createElement("div");
+  d.className="card "+COL[c.s]+(isSel?" selected":"")+(isDame?" dame":"")+(isStacked?" stacked":"")+(isReserve?" reserve-open":"");
+  var inn=document.createElement("div");
+  inn.className="card-inner";
+  var r=document.createElement("span");r.className="card-rank";r.textContent=c.r;
+  var s=document.createElement("span");s.className="card-suit";s.textContent=SYM[c.s];
+  inn.appendChild(r);inn.appendChild(s);d.appendChild(inn);
+  tap(d,fn);
+  return d;
+}
+
+function makeFD(fn){
+  var d=document.createElement("div");
+  d.className="card facedown";
+  if(fn)tap(d,fn);
+  return d;
+}
+
+function makeEmpty(t){
+  var s=document.createElement("span");
+  s.style.cssText="font-size:.7em;color:rgba(255,255,255,.5);text-align:center;padding:4px";
+  s.textContent=t;
+  return s;
+}
+
+function render(){
+  document.getElementById("hc").textContent=reserve.length;
+  document.getElementById("tc").textContent=stock.length;
+  document.getElementById("ac").textContent=abwurf.length;
+
+  var rs=document.getElementById("s-reserve");
+  rs.innerHTML="";
+  if(reserveOpen){
+    rs.appendChild(makeCard(reserveOpen,reserveClick,false,false,false,true));
+  } else if(reserve.length){
+    rs.appendChild(makeFD(reserveClick));
+  } else {
+    rs.appendChild(makeEmpty("leer"));
+  }
+
+  var ts=document.getElementById("s-stock");
+  ts.innerHTML="";
+  ts.appendChild(stock.length?makeFD(stockClick):makeEmpty("leer"));
+
+  var as=document.getElementById("s-abwurf");
+  as.innerHTML="";
+  if(abwurf.length){
+    var c=abwurf[abwurf.length-1];
+    as.appendChild(makeCard(c,abwurfClick,sel&&sel.src==="ab",dameWait&&c.r==="D",false,false));
+  } else as.appendChild(makeEmpty("leer"));
+
+  var fw=document.getElementById("s-found");
+  fw.innerHTML="";
+  for(var i=0;i<8;i++){
+    var sl=document.createElement("div");
+    sl.className="slot";
+    (function(ii){tap(sl,function(){foundClick(ii);});})(i);
+    if(found[i].length){
+      var fc=found[i][found[i].length-1];
+      var fd=document.createElement("div");
+      fd.className="card "+COL[fc.s];
+      var fi=document.createElement("div");fi.className="card-inner";
+      var fr=document.createElement("span");fr.className="card-rank";fr.textContent=fc.r;
+      var fs=document.createElement("span");fs.className="card-suit";fs.textContent=SYM[fc.s];
+      fi.appendChild(fr);fi.appendChild(fs);fd.appendChild(fi);sl.appendChild(fd);
+    } else sl.appendChild(makeEmpty("K→D"));
+    fw.appendChild(sl);
+  }
+
+  var tw=document.getElementById("s-tableau");
+  tw.innerHTML="";
+  for(var i=0;i<8;i++){
+    var sl=document.createElement("div");
+    sl.className="slot";
+    sl.style.justifyContent="flex-start";
+    sl.style.alignItems="center";
+    sl.style.paddingTop="4px";
+    if(tableau[i].length===0){
+      sl.appendChild(makeEmpty("frei"));
+      (function(ii){tap(sl,function(){emptySlotClick(ii);});})(i);
+    } else {
+      for(var ci=0;ci<tableau[i].length;ci++){
+        (function(ii,cci){
+          var c=tableau[ii][cci];
+          var isS=!!(sel&&sel.src==="t"+ii&&sel.ci===cci);
+          sl.appendChild(makeCard(c,function(){tableauClick(ii,cci);},isS,false,cci>0,false));
+        })(i,ci);
+      }
+    }
+    tw.appendChild(sl);
+  }
+}
+
+function regeln(){
+  showOverlay(
+    "DIE LAUNISCHEN DAMEN\n\n"+
+    "Ziel: Alle Karten auf die 8 Grundkartenstapel\n"+
+    "Grundkarten: farbecht aufwärts K→A→2→...→B→D\n\n"+
+    "Hilfsstapel: farbecht abwärts D→B→10→...→A→K\n"+
+    "Leerer Stapel: beliebige Karte oder Folge\n\n"+
+    "Stock: Karte aufdecken auf Abwurf\n"+
+    "Dame im Stock aufgedeckt:\n"+
+    "→ Dame im Abwurf antippen\n"+
+    "→ Die untersten 3 Karten des Abwurfs\n"+
+    "   kommen unter den Stock\n\n"+
+    "Reserve füllt leere Hilfsstapel:\n"+
+    "→ Reserve antippen → Karte aufdecken\n"+
+    "→ Karte auf leeren Hilfsstapel legen\n"+
+    "Dame in Reserve aufgedeckt:\n"+
+    "→ Dame + 5 Karten vom Reservestapel\n"+
+    "   kommen unter den Stock"
+  );
+}
+
+neuesSpiel();
+</script>
+</body>
+</html>
