@@ -66,6 +66,10 @@ var T_ORD=["A","2","3","4","5","6","7","8","9","10","B","D","K"];
 
 var reserve,stock,abwurf,tableau,found,sel,dameWait,hist,reserveOpen,reserveDameWait;
 
+function reserveHasKarten(){
+  return reserve.length>0||reserveOpen!==null||reserveDameWait;
+}
+
 function neuesSpiel(){
   var deck=[];
   for(var i=0;i<RANKS.length;i++)
@@ -243,18 +247,20 @@ function tableauClick(ti,ci){
 
   var c=col[ci];
   if(!c)return;
+
   if(sel){
     if(sel.src==="t"+ti&&sel.ci===ci){sel=null;render();return;}
-    // Auf leeren Stapel: nur wenn Reserve leer oder von Hilfsstapel
+    // Ziel ist leerer Stapel
     if(col.length===0){
-      if(sel.src==="ab"&&reserve.length>0){
-        msg("Leere Stapel zuerst von der Reserve belegen!");
+      if(reserveHasKarten()){
+        msg("Reserve zuerst! Leere Stapel nur von Reserve belegen.");
         sel=null;render();return;
       }
       save();
       placeOn(ti);
       return;
     }
+    // Ziel hat Karten → normal stapeln
     if(ci===col.length-1&&canStack(sel.card,c)){
       save();
       placeOn(ti);
@@ -270,6 +276,8 @@ function tableauClick(ti,ci){
 function emptySlotClick(ti){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
   if(reserveDameWait){msg("👑 Klicke zuerst die Dame auf der Reserve!");return;}
+
+  // Reserve-Karte platzieren
   if(reserveOpen){
     save();
     tableau[ti].push(reserveOpen);
@@ -278,12 +286,16 @@ function emptySlotClick(ti){
     render();
     return;
   }
+
+  // Kein sel → nichts tun
   if(!sel)return;
-  // Abwurf auf leeren Stapel nur wenn Reserve leer
-  if(sel.src==="ab"&&reserve.length>0){
-    msg("Leere Stapel zuerst von der Reserve belegen!");
+
+  // Reserve hat noch Karten → blockieren
+  if(reserveHasKarten()){
+    msg("Reserve zuerst! Leere Stapel nur von Reserve belegen.");
     sel=null;render();return;
   }
+
   save();
   placeOn(ti);
 }
@@ -454,7 +466,7 @@ function regeln(){
     "Ziel: Alle Karten auf die 8 Grundkartenstapel\n"+
     "Grundkarten: farbecht aufwärts K→A→2→...→B→D\n\n"+
     "Hilfsstapel: farbecht abwärts D→B→10→...→A→K\n"+
-    "Leerer Stapel: von Reserve belegen\n"+
+    "Leerer Stapel: nur von Reserve belegen!\n"+
     "(bei leerer Reserve: vom Abwurf oder Hilfsstapel)\n\n"+
     "Stock: Karte aufdecken auf Abwurf\n"+
     "Dame im Stock:\n"+
