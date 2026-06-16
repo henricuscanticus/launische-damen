@@ -71,6 +71,10 @@ function hatLeerenPlatz(){
   return false;
 }
 
+function reservePflicht(){
+  return hatLeerenPlatz()&&(reserve.length>0||reserveOpen!==null);
+}
+
 function neuesSpiel(){
   var deck=[];
   for(var i=0;i<RANKS.length;i++)
@@ -132,11 +136,6 @@ function tap(el,fn){
   el.addEventListener("click",function(e){e.stopPropagation();fn();});
 }
 
-// Prüfe ob Spiel blockiert ist wegen leerem Platz + Reserve hat Karten
-function reservePflicht(){
-  return hatLeerenPlatz() && (reserve.length>0 || reserveOpen!==null);
-}
-
 function stockClick(){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
   if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
@@ -182,36 +181,25 @@ function abwurfClick(){
 
 function reserveClick(){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-
-  // Karte liegt bereits offen → warte auf Klick auf leeren Stapel
-  if(reserveOpen){
+  if(reserveOpen!==null){
     msg(reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
     return;
   }
-
-  // Kein leerer Platz → Reserve nicht nötig
   if(!hatLeerenPlatz()){msg("Kein leerer Hilfsstapel!");return;}
-
-  // Reserve leer
   if(!reserve.length){msg("Reserve ist leer!");return;}
-
   save();
   reserveOpen=reserve.pop();
-  if(reserveOpen.r==="D"){
-    msg("👑 Dame "+sName(reserveOpen.s)+" – Klicke einen leeren Hilfsstapel!");
-  } else {
-    msg(reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
-  }
+  msg(reserveOpen.r+SYM[reserveOpen.s]+" – Klicke einen leeren Hilfsstapel!");
   render();
 }
 
 function legeReserveAuf(ti){
-  // Lege reserveOpen auf leeren Hilfsstapel ti
   var c=reserveOpen;
   reserveOpen=null;
+  // Karte kommt auf den leeren Hilfsstapel
   tableau[ti].push(c);
   if(c.r==="D"){
-    // Dame: 5 Karten unter den Stock
+    // Dame auf Stapel: 5 Karten (OHNE Dame) unter den Stock
     var n=Math.min(5,reserve.length);
     var namen="";
     if(n>0){
@@ -223,7 +211,6 @@ function legeReserveAuf(ti){
     showOverlay("👑 Dame "+sName(c.s)+" auf Hilfsstapel!\n"+
       (n>0?n+" Karten ("+namen+")\nkommen unter den Stock.":"Keine Karten mehr in Reserve."));
   } else {
-    // Normale Karte: prüfe ob noch leere Plätze und Reserve hat Karten
     if(hatLeerenPlatz()&&reserve.length>0){
       msg("Noch leerer Platz! Klicke wieder die Reserve!");
     } else {
@@ -237,7 +224,6 @@ function tableauClick(ti,ci){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
   var col=tableau[ti];
 
-  // Reserve-Karte auf leeren Stapel legen
   if(reserveOpen!==null){
     if(col.length===0){
       save();
@@ -248,14 +234,12 @@ function tableauClick(ti,ci){
     }
   }
 
-  // Spiel blockiert wegen leerem Platz
   if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
 
   var c=col[ci];
   if(!c)return;
   if(sel){
     if(sel.src==="t"+ti&&sel.ci===ci){sel=null;render();return;}
-    // Ziel leer → nur wenn keine Reserve mehr
     if(col.length===0){
       if(reserve.length>0||reserveOpen!==null){
         msg("Leere Stapel zuerst von Reserve belegen!");
@@ -279,20 +263,13 @@ function tableauClick(ti,ci){
 
 function emptySlotClick(ti){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
-
-  // Reserve-Karte platzieren
   if(reserveOpen!==null){
     save();
     legeReserveAuf(ti);
     return;
   }
-
-  // Spiel blockiert
   if(reservePflicht()){msg("Leerer Platz! Klicke zuerst die Reserve!");return;}
-
   if(!sel)return;
-
-  // Reserve leer → darf von Abwurf oder Hilfsstapel
   save();
   placeOn(ti);
 }
@@ -358,7 +335,6 @@ function showOverlay(t){
 
 function overlayOK(){
   document.getElementById("overlay").className="";
-  // Nach Dame-Popup: prüfe ob noch leere Plätze und Reserve hat Karten
   if(hatLeerenPlatz()&&reserve.length>0){
     msg("Noch leerer Platz! Klicke wieder die Reserve!");
   } else {
