@@ -64,8 +64,6 @@ var RANKS=["K","D","B","10","9","8","7","6","5","4","3","2","A"];
 var F_ORD=["K","A","2","3","4","5","6","7","8","9","10","B","D"];
 var T_ORD=["A","2","3","4","5","6","7","8","9","10","B","D","K"];
 
-// reserveOpen: aufgedeckte Karte liegt sichtbar auf Reserve
-// reserveDameWait: Dame liegt auf Reserve, wartet auf Klick
 var reserve,stock,abwurf,tableau,found,sel,dameWait,hist,reserveOpen,reserveDameWait;
 
 function neuesSpiel(){
@@ -178,7 +176,7 @@ function abwurfClick(){
 function reserveClick(){
   if(dameWait){msg("👑 Klicke zuerst die Dame im Abwurf!");return;}
 
-  // Dame auf Reserve wartet → Damenprozedere auslösen
+  // Dame auf Reserve wartet → Damenprozedere
   if(reserveDameWait&&reserveOpen){
     save();
     var c=reserveOpen;
@@ -247,6 +245,16 @@ function tableauClick(ti,ci){
   if(!c)return;
   if(sel){
     if(sel.src==="t"+ti&&sel.ci===ci){sel=null;render();return;}
+    // Auf leeren Stapel: nur wenn Reserve leer oder von Hilfsstapel
+    if(col.length===0){
+      if(sel.src==="ab"&&reserve.length>0){
+        msg("Leere Stapel zuerst von der Reserve belegen!");
+        sel=null;render();return;
+      }
+      save();
+      placeOn(ti);
+      return;
+    }
     if(ci===col.length-1&&canStack(sel.card,c)){
       save();
       placeOn(ti);
@@ -271,6 +279,11 @@ function emptySlotClick(ti){
     return;
   }
   if(!sel)return;
+  // Abwurf auf leeren Stapel nur wenn Reserve leer
+  if(sel.src==="ab"&&reserve.length>0){
+    msg("Leere Stapel zuerst von der Reserve belegen!");
+    sel=null;render();return;
+  }
   save();
   placeOn(ti);
 }
@@ -441,7 +454,8 @@ function regeln(){
     "Ziel: Alle Karten auf die 8 Grundkartenstapel\n"+
     "Grundkarten: farbecht aufwärts K→A→2→...→B→D\n\n"+
     "Hilfsstapel: farbecht abwärts D→B→10→...→A→K\n"+
-    "Leerer Stapel: beliebige Karte oder Folge\n\n"+
+    "Leerer Stapel: von Reserve belegen\n"+
+    "(bei leerer Reserve: vom Abwurf oder Hilfsstapel)\n\n"+
     "Stock: Karte aufdecken auf Abwurf\n"+
     "Dame im Stock:\n"+
     "→ Dame im Abwurf antippen\n"+
