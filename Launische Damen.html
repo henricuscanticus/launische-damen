@@ -75,13 +75,12 @@ function reserveHatKarten(){
   return reserve.length>0||reserveOpen!==null;
 }
 
-// Stock sperren wenn: Lücke + (Reserve hat Karten ODER Abwurf hat Karten)
 function stockGesperrt(){
   if(!hatLeerenPlatz()) return false;
   if(reserveOpen!==null) return true;
   if(reserveHatKarten()) return true;
   if(abwurf.length>0) return true;
-  return false; // Reserve leer + Abwurf leer → Stock erlaubt
+  return false;
 }
 
 function neuesSpiel(){
@@ -172,18 +171,21 @@ function abwurfClick(){
   var c=abwurf[abwurf.length-1];
   if(dameWait&&c.r==="D"){
     save();
-    var n=Math.min(3,abwurf.length-1);
     var namen="";
-    if(n>0){
-      var unten=abwurf.splice(0,n);
+    if(abwurf.length<=3){
+      // Dame ist 1., 2. oder 3. Karte → alle unter den Stock
+      var alle=abwurf.splice(0);
+      namen=alle.map(function(x){return x.r+SYM[x.s];}).join(" ");
+      for(var i=0;i<alle.length;i++)stock.push(alle[i]);
+    } else {
+      // 4 oder mehr Karten → 3 unterste unter Stock, Dame bleibt
+      var unten=abwurf.splice(0,3);
       namen=unten.map(function(x){return x.r+SYM[x.s];}).join(" ");
       for(var i=0;i<unten.length;i++)stock.push(unten[i]);
     }
     dameWait=false;
     render();
-    showOverlay(n>0
-      ?"👑 Dame "+sName(c.s)+"!\nDie untersten "+n+" Karten des Abwurfs\n("+namen+")\nkommen unter den Stock."
-      :"👑 Dame "+sName(c.s)+"!\nAbwurf war leer.");
+    showOverlay("👑 Dame "+sName(c.s)+"!\n"+namen+"\nkommen unter den Stock.");
     return;
   }
   if(dameWait){msg("👑 Klicke die Dame im Abwurf!");return;}
@@ -473,10 +475,10 @@ function regeln(){
     "→ Bei Dame auf Reserve: Dame auf Stapel\n"+
     "   + 5 Karten unter Stock\n\n"+
     "Stock: Karte aufdecken auf Abwurf\n"+
-    "Dame im Stock:\n"+
-    "→ Dame im Abwurf antippen\n"+
-    "→ Die untersten 3 Karten des Abwurfs\n"+
-    "   kommen unter den Stock"
+    "Dame im Abwurf:\n"+
+    "→ Abwurf hat 1-3 Karten: alle unter den Stock\n"+
+    "→ Abwurf hat 4+ Karten: 3 unterste unter Stock\n"+
+    "   Dame bleibt auf Abwurf"
   );
 }
 
